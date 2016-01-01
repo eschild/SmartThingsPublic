@@ -2,11 +2,12 @@
  * 	Color Coordinator 
  *  Version 1.0.0 - 7/4/15
  *  By Michael Struck
- *  Version 1.1 - 11/22/15
+ *  Version 1.2 - 1/1/16
  *  By Eric Schild
  *
  *  1.0.0 - Initial release
  *  1.1 - Added support for Temperature changing Bulbs
+ *  1.2 - Added optional lag support
  *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
@@ -33,6 +34,9 @@ preferences {
 	page(name: "ChooseTypePage", title: "", nextPage: "mainPage", install: false, uninstall: true){
     	section() {
     		input("bulbType", "enum", options: ["colorControl":"Color Bulb","colorTemperature":"Temperature Bulb"], title:"Select bulb type")
+        }
+        section() {
+    		input("enableresync", "boolean", default: false, title:"Enable resync function?")
         }
         section([mobileOnly:true], "") {
 			href "pageAbout", title: "About ${textAppName()}", description: "Tap to get application version, license and instructions"
@@ -90,6 +94,9 @@ def onOffHandler(evt){
     else {
 		slaves?.off()  
     }
+    if(enableresync){
+    	runIn(10, resyncHandler)
+    }
 }
 
 def colorHandler(evt) {
@@ -102,12 +109,38 @@ def colorHandler(evt) {
     } else {
     slaves?.setLevel(dimLevel)
     }
+    if(enableresync){
+    	runIn(10, resyncHandler)
+    }
 }
 
 def tempHandler(evt){
     if (evt.value != "--") {
     	def tempLevel = master.currentValue("colorTemperature")
     	slaves?.setColorTemperature(tempLevel)
+        if(enableresync){
+    		runIn(10, resyncHandler)
+    	}
+    }
+}
+
+//added to handle a little delay in the network
+def resyncHandler(evt){
+	if (master.currentValue("switch") == "on"){
+    	slaves?.on()
+        def tempLevel = master.currentValue("colorTemperature")
+    	slaves?.setColorTemperature(tempLevel)
+		def dimLevel = master.currentValue("level")
+        if(master.hasCommand("setColor")) {
+    		def hueLevel = master.currentValue("hue")
+    		def saturationLevel = master.currentValue("saturation")
+			def newValue = [hue: hueLevel, saturation: saturationLevel, level: dimLevel as Integer]
+    		slaves?.setColor(newValue)
+    	} else {
+    		slaves?.setLevel(dimLevel)
+        }
+    } else {
+		slaves?.off()  
     }
 }
 
@@ -118,11 +151,11 @@ private def textAppName() {
 }	
 
 private def textVersion() {
-    def text = "Version 1.1 (11/22/2015)"
+    def text = "Version 1.2 (1/1/2016)"
 }
 
 private def textCopyright() {
-    def text = "Copyright © 2015 Michael Struck"
+    def text = "Copyright © 2015 Michael Struck.  Additional Copyright © 2016 Eric Schild."
 }
 
 private def textLicense() {
